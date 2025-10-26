@@ -6,3 +6,4 @@ This project borrows the colors.csv from https://github.com/aj90909/unofficial-p
 The colors can be rearranged by dragging and dropping after a color has been added to the palette.
 
 The palettes can be exported in common formats.
+<img width="1017" height="672" alt="image" src="https://github.com/user-attachments/assets/eede837e-0890-4224-81ef-3151a59c806a" />
