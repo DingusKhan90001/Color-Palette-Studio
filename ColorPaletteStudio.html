@@ -8,10 +8,10 @@
     :root { --bg:#0b0c0f; --panel:#12141a; --soft:#1a1d24; --text:#e6e6e6; --muted:#a9b0be; --accent:#6aa6ff; --focus:#8bceff; }
     *{box-sizing:border-box}
     body{margin:0;background:linear-gradient(180deg,#0b0c0f,#0f1116);color:var(--text);font:14px/1.4 system-ui,Segoe UI,Inter,Roboto,Helvetica,Arial}
-    .wrap{max-width:980px;margin:24px auto;padding:0 16px}
+    .wrap{max-width:1100px;margin:24px auto;padding:0 16px}
     header{display:flex;align-items:center;gap:12px;margin-bottom:16px}
     h1{font-size:20px;margin:0}
-    .tag{font-size:12px;color:var(--muted)}
+    .tag{font-size:12px;color:#a9b0be}
     .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
     .card{background:var(--panel);border:1px solid #20242e;border-radius:16px;padding:14px;box-shadow:0 6px 24px rgb(0 0 0 / 35%)}
     .card h2{font-size:14px;margin:0 0 8px 0;color:#d6d8de}
@@ -37,6 +37,9 @@
     .libItem:hover{background:#131825}
     .libItem .thumb{width:22px;height:22px;border-radius:6px;border:1px solid #222}
     .libItem .name{font-size:12px;color:#cfd6e6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .drop{border:1px dashed #2e3645;border-radius:12px;padding:10px;text-align:center;color:#a9b0be;cursor:pointer}
+    .drop.drag{background:#0d1220;border-color:#3b4760}
+    canvas{max-width:100%;border-radius:10px}
   </style>
 </head>
 <body>
@@ -67,6 +70,17 @@
         </div>
         <div id="generated" class="palRow"></div>
 
+        <h2 style="margin-top:12px">Image to palette</h2>
+        <div id="drop" class="drop">
+          Drop image here or click to upload
+          <input id="imgInput" type="file" accept="image/*" style="display:none"/>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button id="extractBtn" class="btn mini">Extract</button>
+          <button id="addAllBtn" class="btn mini">Add all</button>
+        </div>
+        <canvas id="imgCanvas" width="0" height="0" style="display:none"></canvas>
+
         <div class="row" style="margin-top:12px;gap:8px;align-items:center">
           <label for="libCSV" class="btn">Import CSV</label>
           <input id="libCSV" type="file" accept=".csv" class="upload" style="display:none"/>
@@ -89,7 +103,7 @@
       </section>
     </div>
 
-    <p class="footer">Drag to rearrange. Click a palette color to drive these tools. Click the hex to copy.</p>
+    <p class="footer">Drag to rearrange. Click a palette color to drive the tools. Click the hex to copy. Click image preview to pick a pixel.</p>
   </div>
 
 <script>
@@ -101,12 +115,9 @@ function hslToRgb(h,s,l){h/=360;let r,g,b;if(s===0){r=g=b=l}else{const hue2rgb=(
 function rotateHue(hex,deg){const{r,g,b}=hexToRgb(hex);const{h,s,l}=rgbToHsl(r,g,b);const{r:rr,g:gg,b:bb}=hslToRgb((h+deg+360)%360,s,l);return rgbToHex(rr,gg,bb)} 
 function tints(hex,n=5){const res=[];for(let i=1;i<=n;i++){const {h}=rgbToHsl(...Object.values(hexToRgb(hex)));const {r,g,b}=hslToRgb(h,1,Math.min(1,i*0.15));res.push(rgbToHex(r,g,b))}return res}
 function shades(hex,n=5){const res=[];for(let i=1;i<=n;i++){const f=1-i*0.1;const{r,g,b}=hexToRgb(hex);res.push(rgbToHex(r*f,g*f,b*f))}return res}
-
 const qs=s=>document.querySelector(s);const qsa=s=>[...document.querySelectorAll(s)];
-const state={palette:[],active:null,lastMode:'analogous'};
-
+const state={palette:[],active:null,lastMode:'analogous',image:null,imageColors:[]};
 function moveItem(arr,from,to){if(from===to)return;const item=arr.splice(from,1)[0];arr.splice(to,0,item);}
-
 function renderPalette(){
   const box=qs('#palette'); box.innerHTML='';
   state.palette.forEach((c,i)=>{
@@ -115,11 +126,9 @@ function renderPalette(){
     el.innerHTML='<div class="chip" data-idx="'+i+'" style="background:'+c+'"></div><div class="meta"><span class="hex" data-idx="'+i+'">'+c+'</span><button class="removeBtn" data-rm="'+i+'" title="Remove">×</button></div>';
     box.appendChild(el);
   });
-
   box.querySelectorAll('.chip').forEach(ch=>ch.addEventListener('click',e=>{const i=+e.currentTarget.dataset.idx; setActive(i,true)}));
   box.querySelectorAll('.hex').forEach(hx=>hx.addEventListener('click',e=>{const i=+e.currentTarget.dataset.idx; navigator.clipboard&&navigator.clipboard.writeText(state.palette[i])}));
   box.querySelectorAll('.removeBtn').forEach(btn=>btn.addEventListener('click',e=>{const i=+e.currentTarget.dataset.rm; const wasActive=state.active===i; state.palette.splice(i,1); if(wasActive) state.active=null; renderPalette();}));
-
   let dragFrom=null;
   box.querySelectorAll('.swatch').forEach(sw=>{
     sw.addEventListener('dragstart',e=>{dragFrom=+sw.dataset.idx; e.dataTransfer.effectAllowed='move';});
@@ -136,23 +145,19 @@ function renderPalette(){
     });
   });
 }
-
 function highlightActive(){qsa('.swatch').forEach((el,i)=>{if(i===state.active) el.classList.add('active'); else el.classList.remove('active')})}
-
 function addColor(hex){
   hex=hexNorm(hex);
   if(/^#([0-9a-f]{6})$/i.test(hex)&&!state.palette.includes(hex)){
     state.palette.push(hex); renderPalette();
   }
 }
-
 function setActive(index,regen){
   state.active=index;
   const hex=state.palette[index];
   if(hex){ qs('#hexInput').value=hex; qs('#colorInput').value=hex; if(regen) runGenerator(state.lastMode,hex) }
   highlightActive();
 }
-
 function runGenerator(mode,baseHex){
   const base = baseHex || qs('#hexInput').value;
   let list=[];
@@ -165,9 +170,9 @@ function runGenerator(mode,baseHex){
   if(mode==='tints')list=tints(base);
   if(mode==='shades')list=shades(base);
   const box=qs('#generated'); box.innerHTML='';
+  state.imageColors.forEach(c=>{const el=document.createElement('div');el.className='chipMini';el.style.background=c;el.title=c;el.onclick=()=>addColor(c);box.appendChild(el)});
   list.forEach(c=>{const el=document.createElement('div');el.className='chipMini';el.style.background=c;el.title=c;el.onclick=()=>addColor(c);box.appendChild(el)});
 }
-
 qs('#addBtn').addEventListener('click',()=>addColor(qs('#hexInput').value));
 qs('#colorInput').addEventListener('input',e=>qs('#hexInput').value=e.target.value);
 qs('#eyeBtn').addEventListener('click',async()=>{
@@ -175,12 +180,10 @@ qs('#eyeBtn').addEventListener('click',async()=>{
     try{const eye=new EyeDropper();const r=await eye.open();qs('#hexInput').value=r.sRGBHex;qs('#colorInput').value=r.sRGBHex;runGenerator(state.lastMode,r.sRGBHex)}catch(e){}
   } else alert('EyeDropper not supported');
 });
-
 qsa('[data-gen]').forEach(btn=>btn.addEventListener('click',()=>{
   const mode=btn.dataset.gen; state.lastMode=mode; const base = state.active!=null? state.palette[state.active]: qs('#hexInput').value; runGenerator(mode,base);
 }));
 qs('#clearPal').addEventListener('click',()=>{state.palette=[];state.active=null;renderPalette();qs('#generated').innerHTML=''});
-
 qs('#exportJSON').addEventListener('click',()=>{
   const data={colors:state.palette}; const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='palette.json'; a.click();
@@ -196,7 +199,6 @@ qs('#exportPNG').addEventListener('click',()=>{
   for(let i=0;i<n;i++){const x=(i%cols)*size; const y=Math.floor(i/cols)*size; ctx.fillStyle=state.palette[i]; ctx.fillRect(x,y,size,size)}
   const link=document.createElement('a'); link.download='palette.png'; link.href=c.toDataURL('image/png'); link.click();
 });
-
 const libState={all:[],filtered:[],index:0,chunk:200};
 function libListEl(){return document.getElementById('libList')}
 function parseCSV(text){
@@ -217,14 +219,12 @@ function parseCSV(text){
   if(val.length||cur.length){ cur.push(val.trim()); rows.push(cur) }
   return rows;
 }
-
 document.getElementById('libCSV').addEventListener('change', async e=>{
   const file=e.target.files[0]; if(!file)return;
   const txt=await file.text(); loadLibraryFromCSV(txt);
 });
 document.getElementById('libSearch').addEventListener('input',()=>filterLibrary(document.getElementById('libSearch').value));
 document.getElementById('libClear').addEventListener('click',()=>{document.getElementById('libSearch').value='';filterLibrary('')});
-
 function loadLibraryFromCSV(txt){
   const rows=parseCSV(txt).filter(r=>r.length && r.join('').length);
   if(!rows.length){ alert('Empty CSV'); return }
@@ -256,14 +256,12 @@ function loadLibraryFromCSV(txt){
   } else { alert('CSV headers not recognized'); return }
   libState.all=list; filterLibrary(document.getElementById('libSearch').value||'');
 }
-
 function filterLibrary(q){
   q=(q||'').toLowerCase();
   libState.filtered = !q? libState.all: libState.all.filter(it=> (it.name+' '+it.hex+' '+(it.category||'')).toLowerCase().includes(q));
   libState.index=0;
   const root=libListEl(); if(root){ root.innerHTML=''; renderMoreLib() }
 }
-
 function renderMoreLib(){
   const root=libListEl(); if(!root) return;
   const end=Math.min(libState.index+libState.chunk, libState.filtered.length);
@@ -276,17 +274,74 @@ function renderMoreLib(){
   }
   libState.index=end;
 }
-
 libListEl().addEventListener('scroll', e=>{
   const el=e.target;
   if(el.scrollTop+el.clientHeight>=el.scrollHeight-24){
     if(libState.index<libState.filtered.length){ renderMoreLib() }
   }
 });
-
 function labToXyz(L,a,b){ const Xn=0.95047,Yn=1.00000,Zn=1.08883; const fy=(L+16)/116; const fx=a/500+fy; const fz=fy-b/200; const finv=t=>{const t3=t*t*t; return t3>0.008856? t3: (t-16/116)/7.787}; return { x:Xn*finv(fx), y:Yn*finv(fy), z:Zn*finv(fz) } }
 function xyzToSrgb(o){ let x=o.x,y=o.y,z=o.z; let R= 3.2404542*x -1.5371385*y -0.4985314*z; let G=-0.9692660*x +1.8760108*y +0.0415560*z; let B= 0.0556434*x -0.2040259*y +1.0572252*z; const comp=u=>{ u=Math.min(1,Math.max(0,u)); return u<=0.0031308? 12.92*u: 1.055*Math.pow(u,1/2.4)-0.055 }; R=comp(R); G=comp(G); B=comp(B); return { r:Math.round(R*255), g:Math.round(G*255), b:Math.round(B*255) } }
-
+function loadImageFromFile(file){
+  return new Promise((resolve,reject)=>{
+    const img=new Image(); img.onload=()=>resolve(img); img.onerror=reject; img.src=URL.createObjectURL(file);
+  });
+}
+function drawImageToCanvas(img,maxSide=600){
+  const cnv=qs('#imgCanvas'); const ctx=cnv.getContext('2d');
+  const ratio=img.width/img.height;
+  if(img.width>img.height){ cnv.width=Math.min(maxSide,img.width); cnv.height=Math.round(cnv.width/ratio); }
+  else { cnv.height=Math.min(maxSide,img.height); cnv.width=Math.round(cnv.height*ratio); }
+  ctx.clearRect(0,0,cnv.width,cnv.height);
+  ctx.drawImage(img,0,0,cnv.width,cnv.height);
+  cnv.style.display='block';
+  cnv.onclick=(e)=>{const rect=cnv.getBoundingClientRect(); const x=Math.floor((e.clientX-rect.left)/rect.width*cnv.width); const y=Math.floor((e.clientY-rect.top)/rect.height*cnv.height); const d=ctx.getImageData(x,y,1,1).data; const hex=rgbToHex(d[0],d[1],d[2]); addColor(hex); qs('#hexInput').value=hex; qs('#colorInput').value=hex; runGenerator(state.lastMode,hex)};
+}
+function kmeansColors(ctx,w,h,k=8,step=4,iter=10){
+  const data=ctx.getImageData(0,0,w,h).data;
+  const pts=[];
+  for(let y=0;y<h;y+=step){
+    for(let x=0;x<w;x+=step){
+      const i=(y*w+x)*4; const r=data[i],g=data[i+1],b=data[i+2],a=data[i+3];
+      if(a<16) continue;
+      pts.push([r,g,b]);
+    }
+  }
+  if(pts.length===0) return [];
+  const centers=[];
+  for(let i=0;i<k;i++){ const p=pts[Math.floor(Math.random()*pts.length)]; centers.push(p.slice()); }
+  for(let t=0;t<iter;t++){
+    const sums=new Array(k).fill(0).map(()=>[0,0,0,0]);
+    for(const p of pts){
+      let bi=0,bd=1e9;
+      for(let c=0;c<k;c++){ const dx=p[0]-centers[c][0],dy=p[1]-centers[c][1],dz=p[2]-centers[c][2]; const d=dx*dx+dy*dy+dz*dz; if(d<bd){bd=d;bi=c} }
+      const s=sums[bi]; s[0]+=p[0]; s[1]+=p[1]; s[2]+=p[2]; s[3]+=1;
+    }
+    for(let c=0;c<k;c++){ const s=sums[c]; if(s[3]>0){ centers[c]=[s[0]/s[3],s[1]/s[3],s[2]/s[3]]; } }
+  }
+  const hexes=centers.map(c=>rgbToHex(c[0],c[1],c[2]));
+  const uniq=[...new Set(hexes.map(h=>h.toLowerCase()))];
+  return uniq;
+}
+const drop=qs('#drop'); const imgInput=qs('#imgInput');
+drop.addEventListener('click',()=>imgInput.click());
+drop.addEventListener('dragover',e=>{e.preventDefault(); drop.classList.add('drag')});
+drop.addEventListener('dragleave',()=>drop.classList.remove('drag'));
+drop.addEventListener('drop',async e=>{
+  e.preventDefault(); drop.classList.remove('drag');
+  const file=e.dataTransfer.files[0]; if(file) await handleImageFile(file);
+});
+imgInput.addEventListener('change',async e=>{const f=e.target.files[0]; if(f) await handleImageFile(f)});
+async function handleImageFile(file){
+  const img=await loadImageFromFile(file); state.image=img; drawImageToCanvas(img); state.imageColors=[]; runGenerator(state.lastMode, qs('#hexInput').value);
+}
+qs('#extractBtn').addEventListener('click',()=>{
+  const cnv=qs('#imgCanvas'); if(!cnv.width||!cnv.height) return;
+  const ctx=cnv.getContext('2d');
+  state.imageColors=kmeansColors(ctx,cnv.width,cnv.height,8,Math.max(2,Math.floor(Math.min(cnv.width,cnv.height)/120)),12);
+  runGenerator(state.lastMode, qs('#hexInput').value);
+});
+qs('#addAllBtn').addEventListener('click',()=>{ state.imageColors.forEach(addColor) });
 renderPalette();
 runGenerator(state.lastMode, '#1e90ff');
 </script>
