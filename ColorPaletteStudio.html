@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Color Palette Studio</title>
+  <style>
+    :root { --bg:#0b0c0f; --panel:#12141a; --soft:#1a1d24; --text:#e6e6e6; --muted:#a9b0be; --accent:#6aa6ff; --focus:#8bceff; }
+    *{box-sizing:border-box}
+    body{margin:0;background:linear-gradient(180deg,#0b0c0f,#0f1116);color:var(--text);font:14px/1.4 system-ui,Segoe UI,Inter,Roboto,Helvetica,Arial}
+    .wrap{max-width:980px;margin:24px auto;padding:0 16px}
+    header{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+    h1{font-size:20px;margin:0}
+    .tag{font-size:12px;color:var(--muted)}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .card{background:var(--panel);border:1px solid #20242e;border-radius:16px;padding:14px;box-shadow:0 6px 24px rgb(0 0 0 / 35%)}
+    .card h2{font-size:14px;margin:0 0 8px 0;color:#d6d8de}
+    .row{display:flex;gap:8px;flex-wrap:wrap}
+    .btn{appearance:none;border:1px solid #2a303c;background:var(--soft);color:var(--text);padding:8px 10px;border-radius:12px;cursor:pointer;font-size:13px}
+    .btn:hover{border-color:#3a4150}
+    .btn.primary{background:var(--accent);color:#041532;border-color:#79b1ff}
+    input[type="text"], input[type="search"], .upload{background:#0f1219;border:1px solid #272c38;color:var(--text);padding:8px 10px;border-radius:10px;font-size:13px}
+    .swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-top:10px}
+    .swatch{border:2px solid #2a303c;border-radius:12px;overflow:hidden;background:#0e1117;transition:border-color .15s, box-shadow .15s}
+    .swatch.active{border-color:var(--focus);box-shadow:0 0 0 3px rgba(139,206,255,.25)}
+    .swatch.dragover{outline:2px dashed var(--focus); outline-offset:-4px}
+    .swatch .chip{height:70px;cursor:pointer}
+    .swatch .meta{padding:4px 8px;display:flex;justify-content:space-between;align-items:center}
+    .meta .hex{font-family:ui-monospace,Menlo,Consolas;font-size:12px;cursor:pointer}
+    .removeBtn{background:none;border:none;color:#ff6a6a;font-weight:bold;cursor:pointer;font-size:14px}
+    .removeBtn:hover{color:#ff3b3b}
+    .palRow{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+    .chipMini{width:26px;height:26px;border-radius:6px;border:1px solid #222;cursor:pointer}
+    .footer{opacity:.8;margin-top:16px;font-size:12px;color:#a9b0be}
+    #libList{border:1px solid #2a303c;border-radius:10px;max-height:240px;overflow:auto;padding:6px;background:#0e1117}
+    .libItem{display:flex;align-items:center;gap:10px;padding:6px;border-radius:8px;cursor:pointer}
+    .libItem:hover{background:#131825}
+    .libItem .thumb{width:22px;height:22px;border-radius:6px;border:1px solid #222}
+    .libItem .name{font-size:12px;color:#cfd6e6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Color Palette Studio</h1>
+      <span class="tag">Palette builder with library</span>
+    </header>
+
+    <div class="grid">
+      <section class="card">
+        <h2>Base color</h2>
+        <div class="row" style="align-items:center">
+          <input id="hexInput" type="text" value="#1e90ff"/>
+          <input id="colorInput" type="color" value="#1e90ff" />
+          <button id="eyeBtn" class="btn">Pick from screen</button>
+          <button id="addBtn" class="btn primary">Add</button>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn mini" data-gen="analogous">Analogous</button>
+          <button class="btn mini" data-gen="complementary">Complementary</button>
+          <button class="btn mini" data-gen="splitcomp">Split Comp</button>
+          <button class="btn mini" data-gen="triadic">Triadic</button>
+          <button class="btn mini" data-gen="tetradic">Tetradic</button>
+          <button class="btn mini" data-gen="similar">Similar</button>
+          <button class="btn mini" data-gen="tints">Tints</button>
+          <button class="btn mini" data-gen="shades">Shades</button>
+        </div>
+        <div id="generated" class="palRow"></div>
+
+        <div class="row" style="margin-top:12px;gap:8px;align-items:center">
+          <label for="libCSV" class="btn">Import CSV</label>
+          <input id="libCSV" type="file" accept=".csv" class="upload" style="display:none"/>
+          <input id="libSearch" type="search" class="upload" placeholder="Search colors" style="flex:1;min-width:0"/>
+          <button id="libClear" class="btn mini">Clear</button>
+        </div>
+        <div id="libList" aria-label="Library colors"></div>
+        <p class="footer">CSV headers: name,hex[,category] or PANTONENAME,UNIQUECODE,RED,GREEN,BLUE</p>
+      </section>
+
+      <section class="card">
+        <h2>Palette</h2>
+        <div class="row">
+          <button id="exportCSS" class="btn mini">CSS</button>
+          <button id="exportJSON" class="btn mini">JSON</button>
+          <button id="exportPNG" class="btn mini">PNG</button>
+          <button id="clearPal" class="btn mini">Clear</button>
+        </div>
+        <div id="palette" class="swatches"></div>
+      </section>
+    </div>
+
+    <p class="footer">Drag to rearrange. Click a palette color to drive these tools. Click the hex to copy.</p>
+  </div>
+
+<script>
+const hexNorm=h=>/^#/.test(h)?h.toLowerCase():'#'+h.toLowerCase();
+function hexToRgb(hex){hex=hex.replace('#','');if(hex.length===3){hex=[...hex].map(c=>c+c).join('')}const num=parseInt(hex,16);return{r:(num>>16)&255,g:(num>>8)&255,b:num&255};}
+function rgbToHex(r,g,b){return'#'+[r,g,b].map(v=>Math.round(v).toString(16).padStart(2,'0')).join('');}
+function rgbToHsl(r,g,b){r/=255;g/=255;b/=255;const max=Math.max(r,g,b),min=Math.min(r,g,b);let h,s,l=(max+min)/2;if(max===min){h=s=0}else{const d=max-min;s=l>0.5?d/(2-max-min):d/(max+min);switch(max){case r:h=(g-b)/d+(g<b?6:0);break;case g:h=(b-r)/d+2;break;case b:h=(r-g)/d+4;break}h*=60}return{h:(h+360)%360,s,l}}
+function hslToRgb(h,s,l){h/=360;let r,g,b;if(s===0){r=g=b=l}else{const hue2rgb=(p,q,t)=>{if(t<0)t+=1;if(t>1)t-=1;if(t<1/6)return p+(q-p)*6*t;if(t<1/2)return q;if(t<2/3)return p+(q-p)*(2/3 - t)*6;return p};const q=l<.5?l*(1+s):l+s-l*s;const p=2*l-q;r=hue2rgb(p,q,h+1/3);g=hue2rgb(p,q,h);b=hue2rgb(p,q,h-1/3)}return{r:Math.round(r*255),g:Math.round(g*255),b:Math.round(b*255)}}
+function rotateHue(hex,deg){const{r,g,b}=hexToRgb(hex);const{h,s,l}=rgbToHsl(r,g,b);const{r:rr,g:gg,b:bb}=hslToRgb((h+deg+360)%360,s,l);return rgbToHex(rr,gg,bb)} 
+function tints(hex,n=5){const res=[];for(let i=1;i<=n;i++){const {h}=rgbToHsl(...Object.values(hexToRgb(hex)));const {r,g,b}=hslToRgb(h,1,Math.min(1,i*0.15));res.push(rgbToHex(r,g,b))}return res}
+function shades(hex,n=5){const res=[];for(let i=1;i<=n;i++){const f=1-i*0.1;const{r,g,b}=hexToRgb(hex);res.push(rgbToHex(r*f,g*f,b*f))}return res}
+
+const qs=s=>document.querySelector(s);const qsa=s=>[...document.querySelectorAll(s)];
+const state={palette:[],active:null,lastMode:'analogous'};
+
+function moveItem(arr,from,to){if(from===to)return;const item=arr.splice(from,1)[0];arr.splice(to,0,item);}
+
+function renderPalette(){
+  const box=qs('#palette'); box.innerHTML='';
+  state.palette.forEach((c,i)=>{
+    const el=document.createElement('div'); el.className='swatch'+(state.active===i?' active':'');
+    el.setAttribute('draggable','true'); el.dataset.idx=i;
+    el.innerHTML='<div class="chip" data-idx="'+i+'" style="background:'+c+'"></div><div class="meta"><span class="hex" data-idx="'+i+'">'+c+'</span><button class="removeBtn" data-rm="'+i+'" title="Remove">×</button></div>';
+    box.appendChild(el);
+  });
+
+  box.querySelectorAll('.chip').forEach(ch=>ch.addEventListener('click',e=>{const i=+e.currentTarget.dataset.idx; setActive(i,true)}));
+  box.querySelectorAll('.hex').forEach(hx=>hx.addEventListener('click',e=>{const i=+e.currentTarget.dataset.idx; navigator.clipboard&&navigator.clipboard.writeText(state.palette[i])}));
+  box.querySelectorAll('.removeBtn').forEach(btn=>btn.addEventListener('click',e=>{const i=+e.currentTarget.dataset.rm; const wasActive=state.active===i; state.palette.splice(i,1); if(wasActive) state.active=null; renderPalette();}));
+
+  let dragFrom=null;
+  box.querySelectorAll('.swatch').forEach(sw=>{
+    sw.addEventListener('dragstart',e=>{dragFrom=+sw.dataset.idx; e.dataTransfer.effectAllowed='move';});
+    sw.addEventListener('dragover',e=>{e.preventDefault(); sw.classList.add('dragover'); e.dataTransfer.dropEffect='move';});
+    sw.addEventListener('dragleave',()=>sw.classList.remove('dragover'));
+    sw.addEventListener('drop',e=>{
+      e.preventDefault();
+      sw.classList.remove('dragover');
+      const to=+sw.dataset.idx;
+      const activeColor = state.active!=null? state.palette[state.active]: null;
+      moveItem(state.palette, dragFrom, to);
+      renderPalette();
+      if(activeColor){ state.active = state.palette.indexOf(activeColor); highlightActive(); }
+    });
+  });
+}
+
+function highlightActive(){qsa('.swatch').forEach((el,i)=>{if(i===state.active) el.classList.add('active'); else el.classList.remove('active')})}
+
+function addColor(hex){
+  hex=hexNorm(hex);
+  if(/^#([0-9a-f]{6})$/i.test(hex)&&!state.palette.includes(hex)){
+    state.palette.push(hex); renderPalette();
+  }
+}
+
+function setActive(index,regen){
+  state.active=index;
+  const hex=state.palette[index];
+  if(hex){ qs('#hexInput').value=hex; qs('#colorInput').value=hex; if(regen) runGenerator(state.lastMode,hex) }
+  highlightActive();
+}
+
+function runGenerator(mode,baseHex){
+  const base = baseHex || qs('#hexInput').value;
+  let list=[];
+  if(mode==='analogous')list=[rotateHue(base,-30),base,rotateHue(base,30)];
+  if(mode==='complementary')list=[base,rotateHue(base,180)];
+  if(mode==='splitcomp')list=[rotateHue(base,-30),base,rotateHue(base,30),rotateHue(base,180)];
+  if(mode==='triadic')list=[base,rotateHue(base,120),rotateHue(base,240)];
+  if(mode==='tetradic')list=[base,rotateHue(base,60),rotateHue(base,180),rotateHue(base,240)];
+  if(mode==='similar')list=[rotateHue(base,-12),rotateHue(base,-6),base,rotateHue(base,6),rotateHue(base,12)];
+  if(mode==='tints')list=tints(base);
+  if(mode==='shades')list=shades(base);
+  const box=qs('#generated'); box.innerHTML='';
+  list.forEach(c=>{const el=document.createElement('div');el.className='chipMini';el.style.background=c;el.title=c;el.onclick=()=>addColor(c);box.appendChild(el)});
+}
+
+qs('#addBtn').addEventListener('click',()=>addColor(qs('#hexInput').value));
+qs('#colorInput').addEventListener('input',e=>qs('#hexInput').value=e.target.value);
+qs('#eyeBtn').addEventListener('click',async()=>{
+  if('EyeDropper'in window){
+    try{const eye=new EyeDropper();const r=await eye.open();qs('#hexInput').value=r.sRGBHex;qs('#colorInput').value=r.sRGBHex;runGenerator(state.lastMode,r.sRGBHex)}catch(e){}
+  } else alert('EyeDropper not supported');
+});
+
+qsa('[data-gen]').forEach(btn=>btn.addEventListener('click',()=>{
+  const mode=btn.dataset.gen; state.lastMode=mode; const base = state.active!=null? state.palette[state.active]: qs('#hexInput').value; runGenerator(mode,base);
+}));
+qs('#clearPal').addEventListener('click',()=>{state.palette=[];state.active=null;renderPalette();qs('#generated').innerHTML=''});
+
+qs('#exportJSON').addEventListener('click',()=>{
+  const data={colors:state.palette}; const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='palette.json'; a.click();
+});
+qs('#exportCSS').addEventListener('click',()=>{
+  const css=':root\n{\n'+state.palette.map((c,i)=>'  --c'+(i+1)+': '+c+';').join('\n')+'\n}';
+  const blob=new Blob([css],{type:'text/css'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='palette.css'; a.click();
+});
+qs('#exportPNG').addEventListener('click',()=>{
+  if(!state.palette.length){alert('No colors');return}
+  const n=state.palette.length; const cols=Math.ceil(Math.sqrt(n)); const rows=Math.ceil(n/cols); const size=160;
+  const c=document.createElement('canvas'); c.width=cols*size; c.height=rows*size; const ctx=c.getContext('2d');
+  for(let i=0;i<n;i++){const x=(i%cols)*size; const y=Math.floor(i/cols)*size; ctx.fillStyle=state.palette[i]; ctx.fillRect(x,y,size,size)}
+  const link=document.createElement('a'); link.download='palette.png'; link.href=c.toDataURL('image/png'); link.click();
+});
+
+const libState={all:[],filtered:[],index:0,chunk:200};
+function libListEl(){return document.getElementById('libList')}
+function parseCSV(text){
+  const rows=[]; let cur=[], val='', inQ=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(inQ){
+      if(ch==='"'){ if(text[i+1]==='"'){ val+='"'; i++ } else { inQ=false } }
+      else { val+=ch }
+    } else {
+      if(ch==='"'){ inQ=true }
+      else if(ch===','){ cur.push(val.trim()); val='' }
+      else if(ch==='\n'){ cur.push(val.trim()); rows.push(cur); cur=[]; val='' }
+      else if(ch==='\r'){}
+      else { val+=ch }
+    }
+  }
+  if(val.length||cur.length){ cur.push(val.trim()); rows.push(cur) }
+  return rows;
+}
+
+document.getElementById('libCSV').addEventListener('change', async e=>{
+  const file=e.target.files[0]; if(!file)return;
+  const txt=await file.text(); loadLibraryFromCSV(txt);
+});
+document.getElementById('libSearch').addEventListener('input',()=>filterLibrary(document.getElementById('libSearch').value));
+document.getElementById('libClear').addEventListener('click',()=>{document.getElementById('libSearch').value='';filterLibrary('')});
+
+function loadLibraryFromCSV(txt){
+  const rows=parseCSV(txt).filter(r=>r.length && r.join('').length);
+  if(!rows.length){ alert('Empty CSV'); return }
+  const header=rows.shift().map(s=>s.trim());
+  const lower=header.map(h=>h.toLowerCase());
+  const iName=lower.indexOf('name');
+  const iHex=lower.indexOf('hex');
+  const iCat=lower.indexOf('category');
+  const iPantone=lower.indexOf('pantonename');
+  const iCode=lower.indexOf('uniquecode');
+  const iR=lower.indexOf('red');
+  const iG=lower.indexOf('green');
+  const iB=lower.indexOf('blue');
+  const list=[];
+  function pushHex(name,hex,category){
+    if(hex && !hex.startsWith('#')) hex='#'+hex;
+    if(/^#([0-9a-f]{6})$/i.test(hex)) list.push({name:name||'',hex:hex.toLowerCase(),category:category||''});
+  }
+  if(iName>=0 && iHex>=0){
+    for(const r of rows){ pushHex(r[iName], r[iHex], iCat>=0? r[iCat]: '') }
+  } else if(iPantone>=0 && iR>=0 && iG>=0 && iB>=0){
+    for(const r of rows){
+      const L=parseFloat(r[iR]); const a=parseFloat(r[iG]); const b=parseFloat(r[iB]);
+      if(Number.isFinite(L)&&Number.isFinite(a)&&Number.isFinite(b)){
+        const xyz=labToXyz(L,a,b); const s=xyzToSrgb(xyz); const hex=rgbToHex(s.r,s.g,s.b);
+        pushHex(r[iPantone], hex, iCode>=0? r[iCode]: '');
+      }
+    }
+  } else { alert('CSV headers not recognized'); return }
+  libState.all=list; filterLibrary(document.getElementById('libSearch').value||'');
+}
+
+function filterLibrary(q){
+  q=(q||'').toLowerCase();
+  libState.filtered = !q? libState.all: libState.all.filter(it=> (it.name+' '+it.hex+' '+(it.category||'')).toLowerCase().includes(q));
+  libState.index=0;
+  const root=libListEl(); if(root){ root.innerHTML=''; renderMoreLib() }
+}
+
+function renderMoreLib(){
+  const root=libListEl(); if(!root) return;
+  const end=Math.min(libState.index+libState.chunk, libState.filtered.length);
+  for(let i=libState.index;i<end;i++){
+    const it=libState.filtered[i];
+    const row=document.createElement('div'); row.className='libItem';
+    row.innerHTML='<div class="thumb" style="background:'+it.hex+'"></div><div class="name">'+(it.name||it.hex)+'</div>';
+    row.addEventListener('click',()=> addColor(it.hex));
+    root.appendChild(row);
+  }
+  libState.index=end;
+}
+
+libListEl().addEventListener('scroll', e=>{
+  const el=e.target;
+  if(el.scrollTop+el.clientHeight>=el.scrollHeight-24){
+    if(libState.index<libState.filtered.length){ renderMoreLib() }
+  }
+});
+
+function labToXyz(L,a,b){ const Xn=0.95047,Yn=1.00000,Zn=1.08883; const fy=(L+16)/116; const fx=a/500+fy; const fz=fy-b/200; const finv=t=>{const t3=t*t*t; return t3>0.008856? t3: (t-16/116)/7.787}; return { x:Xn*finv(fx), y:Yn*finv(fy), z:Zn*finv(fz) } }
+function xyzToSrgb(o){ let x=o.x,y=o.y,z=o.z; let R= 3.2404542*x -1.5371385*y -0.4985314*z; let G=-0.9692660*x +1.8760108*y +0.0415560*z; let B= 0.0556434*x -0.2040259*y +1.0572252*z; const comp=u=>{ u=Math.min(1,Math.max(0,u)); return u<=0.0031308? 12.92*u: 1.055*Math.pow(u,1/2.4)-0.055 }; R=comp(R); G=comp(G); B=comp(B); return { r:Math.round(R*255), g:Math.round(G*255), b:Math.round(B*255) } }
+
+renderPalette();
+runGenerator(state.lastMode, '#1e90ff');
+</script>
+</body>
+</html>
