@@ -19,7 +19,7 @@
     .btn{appearance:none;border:1px solid #2a303c;background:var(--soft);color:var(--text);padding:8px 10px;border-radius:12px;cursor:pointer;font-size:13px}
     .btn:hover{border-color:#3a4150}
     .btn.primary{background:var(--accent);color:#041532;border-color:#79b1ff}
-    input[type="text"], input[type="search"], .upload{background:#0f1219;border:1px solid #272c38;color:var(--text);padding:8px 10px;border-radius:10px;font-size:13px}
+    input[type="text"], input[type="search"], .upload, select, input[type="number"]{background:#0f1219;border:1px solid #272c38;color:var(--text);padding:8px 10px;border-radius:10px;font-size:13px}
     .swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-top:10px}
     .swatch{border:2px solid #2a303c;border-radius:12px;overflow:hidden;background:#0e1117;transition:border-color .15s, box-shadow .15s}
     .swatch.active{border-color:var(--focus);box-shadow:0 0 0 3px rgba(139,206,255,.25)}
@@ -30,7 +30,8 @@
     .removeBtn{background:none;border:none;color:#ff6a6a;font-weight:bold;cursor:pointer;font-size:14px}
     .removeBtn:hover{color:#ff3b3b}
     .palRow{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
-    .chipMini{width:26px;height:26px;border-radius:6px;border:1px solid #222;cursor:pointer}
+    .chipMini{width:26px;height:26px;border-radius:6px;border:1px solid #222;cursor:pointer;position:relative}
+    .chipMini .pct{position:absolute;bottom:-14px;left:0;right:0;text-align:center;font-size:10px;color:#a9b0be}
     .footer{opacity:.8;margin-top:16px;font-size:12px;color:#a9b0be}
     #libList{border:1px solid #2a303c;border-radius:10px;max-height:240px;overflow:auto;padding:6px;background:#0e1117}
     .libItem{display:flex;align-items:center;gap:10px;padding:6px;border-radius:8px;cursor:pointer}
@@ -75,7 +76,14 @@
           Drop image here or click to upload
           <input id="imgInput" type="file" accept="image/*" style="display:none"/>
         </div>
-        <div class="row" style="margin-top:8px">
+        <div class="row" style="margin-top:8px;align-items:center">
+          <label>Mode</label>
+          <select id="extractMode">
+            <option value="dominant" selected>Most common</option>
+            <option value="diverse">More colors</option>
+          </select>
+          <label>Colors</label>
+          <input id="colorCount" type="number" min="4" max="32" step="1" value="8" style="width:90px"/>
           <button id="extractBtn" class="btn mini">Extract</button>
           <button id="addAllBtn" class="btn mini">Add all</button>
         </div>
@@ -170,7 +178,11 @@ function runGenerator(mode,baseHex){
   if(mode==='tints')list=tints(base);
   if(mode==='shades')list=shades(base);
   const box=qs('#generated'); box.innerHTML='';
-  state.imageColors.forEach(c=>{const el=document.createElement('div');el.className='chipMini';el.style.background=c;el.title=c;el.onclick=()=>addColor(c);box.appendChild(el)});
+  state.imageColors.forEach(({hex,pct})=>{
+    const el=document.createElement('div');el.className='chipMini';el.style.background=hex;el.title=hex+' • '+pct+'%';el.onclick=()=>addColor(hex);
+    const pc=document.createElement('div');pc.className='pct';pc.textContent=pct+'%';el.appendChild(pc);
+    box.appendChild(el);
+  });
   list.forEach(c=>{const el=document.createElement('div');el.className='chipMini';el.style.background=c;el.title=c;el.onclick=()=>addColor(c);box.appendChild(el)});
 }
 qs('#addBtn').addEventListener('click',()=>addColor(qs('#hexInput').value));
@@ -297,7 +309,10 @@ function drawImageToCanvas(img,maxSide=600){
   cnv.style.display='block';
   cnv.onclick=(e)=>{const rect=cnv.getBoundingClientRect(); const x=Math.floor((e.clientX-rect.left)/rect.width*cnv.width); const y=Math.floor((e.clientY-rect.top)/rect.height*cnv.height); const d=ctx.getImageData(x,y,1,1).data; const hex=rgbToHex(d[0],d[1],d[2]); addColor(hex); qs('#hexInput').value=hex; qs('#colorInput').value=hex; runGenerator(state.lastMode,hex)};
 }
-function kmeansColors(ctx,w,h,k=8,step=4,iter=10){
+function mulberry32(a){return function(){var t=a+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
+function hashCanvas(ctx,w,h,step){const d=ctx.getImageData(0,0,w,h).data;let hval=2166136261>>>0;for(let i=0;i<d.length;i+=4*step){hval^=d[i];hval=Math.imul(hval,16777619);}return hval>>>0;}
+function seededChoice(arr,rand){return arr[Math.floor(rand()*arr.length)]}
+function kmeansColors(ctx,w,h,k,step,iter,seed){
   const data=ctx.getImageData(0,0,w,h).data;
   const pts=[];
   for(let y=0;y<h;y+=step){
@@ -308,8 +323,9 @@ function kmeansColors(ctx,w,h,k=8,step=4,iter=10){
     }
   }
   if(pts.length===0) return [];
-  const centers=[];
-  for(let i=0;i<k;i++){ const p=pts[Math.floor(Math.random()*pts.length)]; centers.push(p.slice()); }
+  const rand=mulberry32(seed||123456);
+  const centers=[]; centers.push(seedededKppStart(pts,rand));
+  while(centers.length<k){ centers.push(seedededKppNext(pts,centers,rand)); }
   for(let t=0;t<iter;t++){
     const sums=new Array(k).fill(0).map(()=>[0,0,0,0]);
     for(const p of pts){
@@ -319,9 +335,31 @@ function kmeansColors(ctx,w,h,k=8,step=4,iter=10){
     }
     for(let c=0;c<k;c++){ const s=sums[c]; if(s[3]>0){ centers[c]=[s[0]/s[3],s[1]/s[3],s[2]/s[3]]; } }
   }
-  const hexes=centers.map(c=>rgbToHex(c[0],c[1],c[2]));
-  const uniq=[...new Set(hexes.map(h=>h.toLowerCase()))];
-  return uniq;
+  const counts=new Array(k).fill(0);
+  for(const p of pts){
+    let bi=0,bd=1e9;
+    for(let c=0;c<k;c++){ const dx=p[0]-centers[c][0],dy=p[1]-centers[c][1],dz=p[2]-centers[c][2]; const d=dx*dx+dy*dy+dz*dz; if(d<bd){bd=d;bi=c} }
+    counts[bi]++;
+  }
+  const total=counts.reduce((a,b)=>a+b,0)||1;
+  const list=centers.map((c,i)=>({hex:rgbToHex(c[0],c[1],c[2]).toLowerCase(),count:counts[i]}));
+  const dedup=new Map();
+  for(const item of list){ if(!dedup.has(item.hex)) dedup.set(item.hex,item); else dedup.get(item.hex).count+=item.count; }
+  const out=[...dedup.values()].sort((a,b)=>b.count-a.count).map(o=>({hex:o.hex,pct:Math.round(100*o.count/total)}));
+  return out;
+}
+function seedededKppStart(pts,rand){return seededChoice(pts,rand)}
+function seedededKppNext(pts,centers,rand){
+  const ds=pts.map(p=>{
+    let bd=1e9;
+    for(const c of centers){const dx=p[0]-c[0],dy=p[1]-c[1],dz=p[2]-c[2]; const d=dx*dx+dy*dy+dz*dz; if(d<bd) bd=d;}
+    return bd;
+  });
+  const sum=ds.reduce((a,b)=>a+b,0)||1;
+  const target=rand()*sum;
+  let acc=0;
+  for(let i=0;i<pts.length;i++){ acc+=ds[i]; if(acc>=target) return pts[i]; }
+  return pts[pts.length-1];
 }
 const drop=qs('#drop'); const imgInput=qs('#imgInput');
 drop.addEventListener('click',()=>imgInput.click());
@@ -335,13 +373,21 @@ imgInput.addEventListener('change',async e=>{const f=e.target.files[0]; if(f) aw
 async function handleImageFile(file){
   const img=await loadImageFromFile(file); state.image=img; drawImageToCanvas(img); state.imageColors=[]; runGenerator(state.lastMode, qs('#hexInput').value);
 }
-qs('#extractBtn').addEventListener('click',()=>{
+function doExtract(){
   const cnv=qs('#imgCanvas'); if(!cnv.width||!cnv.height) return;
   const ctx=cnv.getContext('2d');
-  state.imageColors=kmeansColors(ctx,cnv.width,cnv.height,8,Math.max(2,Math.floor(Math.min(cnv.width,cnv.height)/120)),12);
+  const mode=qs('#extractMode').value;
+  const count=Math.max(4,Math.min(32,parseInt(qs('#colorCount').value)||8));
+  const baseStep=Math.max(1,Math.floor(Math.min(cnv.width,cnv.height)/120));
+  const step = mode==='diverse'? Math.max(1,Math.floor(baseStep*0.75)) : Math.max(1,Math.floor(baseStep*1.25));
+  const iter = mode==='diverse'? 16 : 24;
+  const seed=hashCanvas(ctx,cnv.width,cnv.height,step);
+  const result=kmeansColors(ctx,cnv.width,cnv.height,count,step,iter,seed);
+  state.imageColors=result;
   runGenerator(state.lastMode, qs('#hexInput').value);
-});
-qs('#addAllBtn').addEventListener('click',()=>{ state.imageColors.forEach(addColor) });
+}
+qs('#extractBtn').addEventListener('click',doExtract);
+qs('#addAllBtn').addEventListener('click',()=>{ state.imageColors.forEach(({hex})=>addColor(hex)) });
 renderPalette();
 runGenerator(state.lastMode, '#1e90ff');
 </script>
